@@ -9,15 +9,17 @@
 CACHE_CONTAINER="${CACHE_CONTAINER:-cacher}"
 DEVSTACK_CONTAINER="${DEVSTACK_CONTAINER:-devstack}"
 
+IP_PATTERN='10\.0\.3\.[0-9]+'
+
 function find_lxc_ip {
     cont_name="$1"
 	out=""
     # The container may not be up just quite yet.
-    while ! echo "$out" | grep -q 10\.0\.3\.
+    while ! echo "$out" | grep -q "$IP_PATTERN"
     do
         out="$(sudo lxc-ls --fancy --fancy-format name,ipv4 ^${cont_name}\$ | tail -n 1)"
     done
-    echo $out | sed -e 's/.*\(10\.0\.3\.[0-9]*\).*/\1/g'
+    echo $out | sed -e "s/.*\($IP_PATTERN\).*/\1/g"
 }
 
 function install_base_packages {
@@ -74,16 +76,14 @@ function create_devstack_container {
 
     # Log in and configure the APT proxy and add the havana cloud-archive
     ssh -t $devstack_ip 'echo Acquire::Http::Proxy \"http://'${cache_ip}':3142/\"\; | sudo tee /etc/apt/apt.conf.d/90proxy ;
+	                     echo PIP_INDEX_URL=\"http://'${cache_ip}':3141/root/pypi/+simple/\" | sudo tee --append /etc/environment ;
 	                     sudo mkdir /dev/net ;
 						 sudo apt-get install python-software-properties ;
 						 sudo add-apt-repository cloud-archive:havana ;
 						 sudo apt-get update ;
 						 sudo apt-get install git curl python-setuptools ;
 						 sudo mkdir /var/run/openstack ;
-						 sudo chmod 777 /var/run/openstack ;
-                         sudo mkdir -p ${HOME}/.pip ;
-                         echo "[global]" | sudo tee --apend /root/.pip/pip.conf ;
-	                     echo "index-url = http://'${cache_ip}':3141/root/pypi/+simple/" | sudo tee --append /root/.pip/pip.conf'
+						 sudo chmod 777 /var/run/openstack'
 
     # Add kvm and tun ctrl devices
     sudo lxc-device -n ${DEVSTACK_CONTAINER} add /dev/kvm
@@ -102,6 +102,11 @@ function setup_module_loading {
     done
 }
 
+function local_git_mirror {
+	create_or_update_local_mirror.sh
+}
+
+
 step=${1:-start}
 
 case $1 in
@@ -116,6 +121,9 @@ case $1 in
 		;&
 	setup_module_loading)
         setup_module_loading
+		;&
+	local_git_mirror)
+        local_git_mirror
 		;;
 esac
 
